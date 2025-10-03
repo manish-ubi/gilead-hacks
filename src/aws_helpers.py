@@ -6,53 +6,79 @@ from typing import Any, Dict, List, Optional, Tuple
 import boto3
 from .logging_utils import info, debug, warn, error
 
+# Memoized AWS session and clients to avoid repeated creation per container
+_CACHED_SESSION: Optional[boto3.session.Session] = None
+_CLIENT_CACHE: Dict[str, Any] = {}
+_RESOURCE_CACHE: Dict[str, Any] = {}
+
 
 def _session():
-	region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-	if region:
-		info(f"Using AWS region: {region}")
-		return boto3.session.Session(region_name=region)
-	return boto3.session.Session()
+    global _CACHED_SESSION
+    if _CACHED_SESSION is not None:
+        return _CACHED_SESSION
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    if region:
+        debug(f"Using AWS region: {region}")
+        _CACHED_SESSION = boto3.session.Session(region_name=region)
+    else:
+        _CACHED_SESSION = boto3.session.Session()
+    return _CACHED_SESSION
 
 
 def get_s3_client():
-	info("Creating S3 client")
-	return _session().client("s3")
+    if "s3" not in _CLIENT_CACHE:
+        debug("Creating S3 client")
+        _CLIENT_CACHE["s3"] = _session().client("s3")
+    return _CLIENT_CACHE["s3"]
 
 
 def get_textract_client():
-	info("Creating Textract client")
-	return _session().client("textract")
+    if "textract" not in _CLIENT_CACHE:
+        debug("Creating Textract client")
+        _CLIENT_CACHE["textract"] = _session().client("textract")
+    return _CLIENT_CACHE["textract"]
 
 
 def get_kendra_client():
-	info("Creating Kendra client")
-	return _session().client("kendra")
+    if "kendra" not in _CLIENT_CACHE:
+        debug("Creating Kendra client")
+        _CLIENT_CACHE["kendra"] = _session().client("kendra")
+    return _CLIENT_CACHE["kendra"]
 
 
 def get_dynamodb_resource():
-	info("Creating DynamoDB resource")
-	return _session().resource("dynamodb")
+    if "dynamodb" not in _RESOURCE_CACHE:
+        debug("Creating DynamoDB resource")
+        _RESOURCE_CACHE["dynamodb"] = _session().resource("dynamodb")
+    return _RESOURCE_CACHE["dynamodb"]
 
 
 def get_lambda_client():
-	info("Creating Lambda client")
-	return _session().client("lambda")
+    if "lambda" not in _CLIENT_CACHE:
+        debug("Creating Lambda client")
+        _CLIENT_CACHE["lambda"] = _session().client("lambda")
+    return _CLIENT_CACHE["lambda"]
 
 
 def get_bedrock_client():
-	info("Creating Bedrock Runtime client")
-	return _session().client("bedrock-runtime")
+    if "bedrock-runtime" not in _CLIENT_CACHE:
+        debug("Creating Bedrock Runtime client")
+        _CLIENT_CACHE["bedrock-runtime"] = _session().client("bedrock-runtime")
+    return _CLIENT_CACHE["bedrock-runtime"]
 
 
 def get_bedrock_agent_client():
-	info("Creating Bedrock Agent client")
-	return _session().client("bedrock-agent")
+    if "bedrock-agent" not in _CLIENT_CACHE:
+        debug("Creating Bedrock Agent client")
+        _CLIENT_CACHE["bedrock-agent"] = _session().client("bedrock-agent")
+    return _CLIENT_CACHE["bedrock-agent"]
 
 
 def get_bedrock_agent_runtime_client():
-	info("Creating Bedrock Agent Runtime client")
-	return _session().client("bedrock-agent-runtime")
+    if "bedrock-agent-runtime" not in _CLIENT_CACHE:
+        debug("Creating Bedrock Agent Runtime client")
+        _CLIENT_CACHE["bedrock-agent-runtime"] = _session().client("bedrock-agent-runtime")
+    return _CLIENT_CACHE["bedrock-agent-runtime"]
 
 
 def s3_put_text(bucket: str, key: str, text: str) -> None:

@@ -3,7 +3,7 @@ import os
 from typing import Any, Dict
 
 from .aws_helpers import hash_query, invoke_agent
-from .cache_dynamodb import get_cached_answer, put_cached_answer
+from .cache_dynamodb import get_cached_answer, put_cached_answer, update_access_stats, cleanup_expired_cache
 from .logging_utils import info, debug, warn, error
 
 
@@ -29,6 +29,7 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
 	cached = get_cached_answer(qhash)
 	if cached and cached.get("answer"):
 		info("Returning cached answer")
+		update_access_stats(qhash)
 		return {"statusCode": 200, "body": json.dumps({"answer": cached["answer"], "cached": True})}
 
 	agent_id = os.getenv("BEDROCK_AGENT_ID", "")

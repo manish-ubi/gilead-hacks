@@ -53,6 +53,10 @@ if "query_history" not in st.session_state:
 	st.session_state.query_history = []
 if "feedback_history" not in st.session_state:
 	st.session_state.feedback_history = {}
+if "generated_sql" not in st.session_state:
+	st.session_state.generated_sql = None
+if "generated_sql_valid" not in st.session_state:
+	st.session_state.generated_sql_valid = False
 
 st.title("Gilead Agentic QA (AWS) - Enhanced")
 tabs = st.tabs(["📄 PDF Q&A", "📊 CSV SQL", "📈 Analytics", "⚙️ Cache Management"])
@@ -85,19 +89,21 @@ with tabs[0]:
 			with st.spinner("Ingesting documents..."):
 				try:
 					target_dir = None
+					file_types = {}
+					total_size = 0
+					written = []
+					
 					if uploaded_files:
 						target_dir = pathlib.Path("uploaded").absolute()
 						target_dir.mkdir(parents=True, exist_ok=True)
-						written: List[str] = []
-						file_types = {}
-						total_size = 0
 						
 						for f in uploaded_files:
 							out_path = target_dir / f.name
 							with open(out_path, "wb") as w:
 								w.write(f.read())
 							written.append(str(out_path))
-							file_types[f.name.split('.')[-1]] = file_types.get(f.name.split('.')[-1], 0) + 1
+							file_ext = f.name.split('.')[-1]
+							file_types[file_ext] = file_types.get(file_ext, 0) + 1
 							total_size += f.size
 						
 						# Upload to S3
@@ -321,21 +327,23 @@ with tabs[1]:
 				
 				st.subheader("📝 Generated SQL")
 				st.code(sql_query, language="sql")
+				# Persist generated SQL
+				st.session_state.generated_sql = sql_query
 				
 				# Validate SQL
 				is_valid, error_msg = csv_handler.validate_sql(sql_query)
 				if is_valid:
 					st.success("✅ SQL is valid and safe")
+					st.session_state.generated_sql_valid = True
 					pipeline_logger.log_sql_generation(nl_question, sql_query, True)
 					
-					# Execute button
-					if st.button("▶️ Execute SQL", type="primary"):
+					# Execute button (uses stored SQL)
+					if st.button("▶️ Execute SQL", type="primary", key="execute_generated_sql"):
 						with st.spinner("Executing query..."):
-							success, df, error_msg = csv_handler.execute_sql(sql_query)
+							success, df, error_msg = csv_handler.execute_sql(st.session_state.generated_sql)
 							if success:
 								st.subheader("📊 Results")
 								st.dataframe(df, use_container_width=True)
-								
 								# Show summary stats
 								if len(df) > 0:
 									st.info(f"📈 Returned {len(df)} rows, {len(df.columns)} columns")
@@ -343,6 +351,7 @@ with tabs[1]:
 								st.error(f"❌ Execution failed: {error_msg}")
 				else:
 					st.error(f"❌ SQL validation failed: {error_msg}")
+					st.session_state.generated_sql_valid = False
 					pipeline_logger.log_sql_generation(nl_question, sql_query, False)
 				
 				pipeline_logger.end_operation(True)
@@ -359,7 +368,7 @@ with tabs[1]:
 		height=100
 	)
 	
-	if st.button("▶️ Execute Manual SQL", type="secondary") and manual_sql.strip():
+	if st.button("▶️ Execute Manual SQL", type="secondary", key="execute_manual_sql") and manual_sql.strip():
 		with st.spinner("Executing..."):
 			success, df, error_msg = csv_handler.execute_sql(manual_sql)
 			if success:
@@ -421,8 +430,8 @@ with tabs[2]:
 		# Response time chart
 		fig = px.line(history_df, x=range(len(history_df)), y="response_time", 
 					 title="Response Time Over Time")
-		fig.update_xaxis(title="Query Number")
-		fig.update_yaxis(title="Response Time (seconds)")
+		fig.update_xaxes(title="Query Number")
+		fig.update_yaxes(title="Response Time (seconds)")
 		st.plotly_chart(fig, use_container_width=True)
 		
 		# Cache hit rate
